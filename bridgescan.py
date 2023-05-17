@@ -5,19 +5,54 @@ from rich.console import Console
 from rich.table import Table
 import csv
 import json
+import os
+from alive_progress import alive_bar
+import requests
+
+etherscan_api_key = ""
+bridge_addresses = {
+    '0x737901bea3eeb88459df9ef1be8ff3ae1b42a2ba': 'Aztec: Bridge',
+    '0xFF1F2B4ADb9dF6FC8eAFecDcbF96A2B351680455': 'Aztec: Connect',
+    '0xD64791E747188b0e5061fC65b56Bf20FeE2e3321': 'Aztec: Sequencer',
+}
+
+# Read my-wallets.csv into a list of dicts.
+with open("my-wallets.csv") as f:
+    my_wallets = [{k: v for k, v in row.items()} for row in csv.DictReader(f)]
+
+transactions = []
+
+with alive_bar(len(my_wallets)) as bar:
+    for wallet in my_wallets:
+        # Normal
+        resp = requests.get(
+            f"https://api.etherscan.io/api?module=account&action=txlist&address={wallet['address']}&startblock=0&endblock=99999999&page=1&offset=10000&sort=asc&apikey={etherscan_api_key}"
+        ).json()
+        transactions += resp['result']
+        print(f"Got {len(resp['result'])} transactions for {wallet['address']}")
+
+        # Token
+        resp = requests.get(f"https://api.etherscan.io/api?module=account&action=tokentx&address={wallet['address']}&page=1&offset=10000&startblock=0&endblock=99999999&sort=asc&apikey={etherscan_api_key}").json()
+        transactions += resp['result']
+        print(f"Got {len(resp['result'])} token transactions for {wallet['address']}")
+
+        # Internal
+        resp = requests.get(f"https://api.etherscan.io/api?module=account&action=txlistinternal&address={wallet['address']}&startblock=0&endblock=99999999&page=1&offset=10000&sort=asc&apikey={etherscan_api_key}").json()
+        transactions += resp['result']
+        print(f"Got {len(resp['result'])} internal transactions for {wallet['address']}")
+        print()
+        bar()
+
+with open("transactions.json", "w") as f:
+    json.dump(transactions, f)
 
 wallets = []
 with open("my-wallets.csv") as f:
     for row in csv.DictReader(f):
         wallets.append(row)
 
-known_addresses = {
-    '0x737901bea3eeb88459df9ef1be8ff3ae1b42a2ba': 'Aztec: Bridge',
-    '0xFF1F2B4ADb9dF6FC8eAFecDcbF96A2B351680455': 'Aztec: Connect',
-    '0xD64791E747188b0e5061fC65b56Bf20FeE2e3321': 'Aztec: Sequencer',
-}
-known_addresses = {k.lower(): v for k, v in known_addresses.items()}
 
+known_addresses = {k.lower(): v for k, v in bridge_addresses.items()}
 labeled_transactions = []
 
 # Find transactions from/to known addresses.
